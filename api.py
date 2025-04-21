@@ -46,8 +46,8 @@ df.rename(columns=column_mapping, inplace=True)
 # Convert datetime column to pandas datetime format
 df['datetime'] = pd.to_datetime(df['datetime'])
 
-# Convert datetime to timestamp
-df['timestamp'] = df['datetime'].astype(np.int64) // 10**9
+# ✅ Updated line to avoid deprecation warning
+df['timestamp'] = df['datetime'].view('int64') // 10**9
 
 # Extract time-based features
 df['day_of_week'] = df['datetime'].dt.dayofweek
