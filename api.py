@@ -5,32 +5,21 @@ import pickle
 import pandas as pd
 from datetime import datetime, timedelta
 import os
-
-app = Flask(__name__)
-
-# Paths (assuming files are in a 'models' folder in root directory)
-DATASET_PATH = "medication_adherence_data.csv"
-SCALER_PATH = "scaler.pkl"
-MED_ENCODER_PATH = "med_encoder.pkl"
-USER_ENCODER_PATH = "user_encoder.pkl"
-MODEL_PATH = "model.keras"
-
-# Load trained model
-model = tf.keras.models.load_model(MODEL_PATH)
+import time
 
 # Load dataset
-df = pd.read_csv(DATASET_PATH)
+dataset_path = 'medication_adherence_data.csv'
+df = pd.read_csv(dataset_path)
 
 # Load saved encoders & scaler
-with open(SCALER_PATH, 'rb') as f:
+with open('scaler.pkl', 'rb') as f:
     scaler = pickle.load(f)
 
-with open(MED_ENCODER_PATH, 'rb') as f:
+with open('med_encoder.pkl', 'rb') as f:
     med_encoder = pickle.load(f)
 
-with open(USER_ENCODER_PATH, 'rb') as f:
+with open('user_encoder.pkl', 'rb') as f:
     user_encoder = pickle.load(f)
-
 
 # Medicine mapping
 medicine_mapping = {
@@ -46,8 +35,8 @@ df.rename(columns=column_mapping, inplace=True)
 # Convert datetime column to pandas datetime format
 df['datetime'] = pd.to_datetime(df['datetime'])
 
-# ✅ Updated line to avoid deprecation warning
-df['timestamp'] = df['datetime'].view('int64') // 10**9
+# Convert datetime to timestamp
+df['timestamp'] = df['datetime'].astype(np.int64) // 10**9
 
 # Extract time-based features
 df['day_of_week'] = df['datetime'].dt.dayofweek
@@ -58,6 +47,13 @@ df['timestamp'] = scaler.transform(df[['timestamp']])
 
 # Apply medicine mapping
 df['medicine_name'] = df['medicine_name'].map(medicine_mapping)
+
+# Load the trained model
+MODEL_PATH = "model.keras"
+model = tf.keras.models.load_model(MODEL_PATH)
+
+app = Flask(__name__)
+
 
 
 
@@ -161,5 +157,6 @@ def predict():
 
     return jsonify({"predictions": predictions_output})
 
+# Run the API
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    app.run(port=5000)
