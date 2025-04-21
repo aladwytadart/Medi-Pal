@@ -95,22 +95,24 @@ user_id_mapping = {
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json()
-    user_string_id = data.get("user_id")
-    medicines = data.get("medicines", [])
+    user_string_id = data.get("user_id")  # User ID as a string from requester
+    medicines = data.get("medicines")
 
+    # ✅ Accept any medicines, but filter to allowed ones only
     medicines = [med for med in medicines if med in medicine_mapping]
+
+    # Convert string user_id to numeric ID
     user_id = user_id_mapping.get(user_string_id)
     if user_id is None:
         return jsonify({"error": "Invalid user_id."}), 400
 
-    if not medicines:
-        return jsonify({"error": "No valid medicines provided."}), 400
+    if not isinstance(medicines, list) or len(medicines) == 0:
+        return jsonify({"error": "No valid medicines. Accepted: Metformin, Lisinopril, Atorvastatin"}), 400
 
     encoded_medicines = [medicine_mapping[med] for med in medicines]
     today = datetime.now()
     start_date = today - timedelta(days=14)
     dates = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 15)]
-
     user_df = df[df['user_id'] == user_id]
     if user_df.empty:
         return jsonify({"error": "User not found"}), 404
@@ -126,12 +128,14 @@ def predict():
         last_14_days = med_df[med_df['datetime'] >= start_date]['taken'].tolist()
         data = med_df[['timestamp', 'day_of_week', 'hour_of_day', 'user_id', 'medicine_name']].values
 
+        # Add today's data to the sequence
         today_timestamp = scaler.transform([[today.timestamp()]])[0][0]
         today_day_of_week = today.weekday()
         today_hour = today.hour
         today_data = np.array([[today_timestamp, today_day_of_week, today_hour, user_id, medicine_encoded]])
         data = np.vstack([data, today_data])
 
+        # Ensure sequence length is 14
         if len(data) > sequence_length:
             data = data[-sequence_length:]
         if len(data) < sequence_length:
