@@ -15,6 +15,9 @@ MED_ENCODER_PATH = "med_encoder.pkl"
 USER_ENCODER_PATH = "user_encoder.pkl"
 MODEL_PATH = "model.keras"
 
+# Load trained model
+model = tf.keras.models.load_model(MODEL_PATH)
+
 # Load dataset
 df = pd.read_csv(DATASET_PATH)
 
@@ -28,12 +31,56 @@ with open(MED_ENCODER_PATH, 'rb') as f:
 with open(USER_ENCODER_PATH, 'rb') as f:
     user_encoder = pickle.load(f)
 
+
 # Medicine mapping
+medicine_mapping = {
+    'Medicine A': 2,
+    'Medicine B': 1,
+    'Medicine C': 0
+}
+
+# Rename columns
+column_mapping = {'Patient ID': 'user_id', 'DateTime': 'datetime', 'Medicine Name': 'medicine_name', 'Taken': 'taken', 'Taken_Probability': 'prob'}
+df.rename(columns=column_mapping, inplace=True)
+
+# Convert datetime column to pandas datetime format
+df['datetime'] = pd.to_datetime(df['datetime'])
+
+# Convert datetime to timestamp
+df['timestamp'] = df['datetime'].astype(np.int64) // 10**9
+
+# Extract time-based features
+df['day_of_week'] = df['datetime'].dt.dayofweek
+df['hour_of_day'] = df['datetime'].dt.hour
+
+# Apply scaler
+df['timestamp'] = scaler.transform(df[['timestamp']])
+
+# Apply medicine mapping
+df['medicine_name'] = df['medicine_name'].map(medicine_mapping)
+
+
+
+def get_dynamic_threshold(past_14_days, predictions):
+    """
+    Adjusts the threshold dynamically based on past 14 days adherence.
+    """
+    past_true_count = sum(past_14_days)
+    adherence_rate = past_true_count / len(past_14_days) if len(past_14_days) > 0 else 0.5
+    sorted_probs = sorted(predictions)
+    cutoff_index = int(len(sorted_probs) * (1 - adherence_rate))
+    threshold = sorted_probs[cutoff_index] if len(sorted_probs) > 0 else 0.5
+    return threshold, adherence_rate * 100
+
+# Medicine Mapping (New)
 medicine_mapping = {
     'Metformin': 2,
     'Lisinopril': 1,
     'Atorvastatin': 0
 }
+
+
+# Reverse mapping for output (if needed)
 reverse_medicine_mapping = {v: k for k, v in medicine_mapping.items()}
 
 # User ID Mapping
@@ -44,34 +91,6 @@ user_id_mapping = {
     "b1OOS3Hb9JczS2PNhaEIcZiwBk73": 4,
     "GU8a2eeI8shEqkw4R1tn3bLKnAt2": 5
 }
-
-# Rename columns
-df.rename(columns={
-    'Patient ID': 'user_id',
-    'DateTime': 'datetime',
-    'Medicine Name': 'medicine_name',
-    'Taken': 'taken',
-    'Taken_Probability': 'prob'
-}, inplace=True)
-
-# Preprocessing
-df['datetime'] = pd.to_datetime(df['datetime'])
-df['timestamp'] = df['datetime'].astype(np.int64) // 10**9
-df['day_of_week'] = df['datetime'].dt.dayofweek
-df['hour_of_day'] = df['datetime'].dt.hour
-df['timestamp'] = scaler.transform(df[['timestamp']])
-df['medicine_name'] = df['medicine_name'].map(medicine_mapping)
-
-# Load trained model
-model = tf.keras.models.load_model(MODEL_PATH)
-
-def get_dynamic_threshold(past_14_days, predictions):
-    past_true_count = sum(past_14_days)
-    adherence_rate = past_true_count / len(past_14_days) if len(past_14_days) > 0 else 0.5
-    sorted_probs = sorted(predictions)
-    cutoff_index = int(len(sorted_probs) * (1 - adherence_rate))
-    threshold = sorted_probs[cutoff_index] if len(sorted_probs) > 0 else 0.5
-    return threshold, adherence_rate * 100
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -137,3 +156,6 @@ def predict():
         predictions_output.extend(false_predictions)
 
     return jsonify({"predictions": predictions_output})
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000)
